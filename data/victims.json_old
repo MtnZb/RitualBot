@@ -1,0 +1,230 @@
+[
+  {
+    "id": 1,
+    "victim_name": "Harley Quinn",
+    "victim_description": "Сумасбродная анархистка из отряда самоубийц",
+    "victim_photo": "photos/1.jpg"
+  },
+  {
+    "id": 2,
+    "victim_name": "Spider-Man",
+    "victim_description": "Человек-паук, герой в красно-синем костюме",
+    "victim_photo": "photos/2.jpg"
+  },
+  {
+    "id": 3,
+    "victim_name": "Deadpool",
+    "victim_description": "Болтливый наемник в красно-черном костюме",
+    "victim_photo": "photos/3.jpg"
+  },
+  {
+    "id": 4,
+    "victim_name": "Nezuko Kamado",
+    "victim_description": "Милая демон-девочка из Demon Slayer",
+    "victim_photo": "photos/4.jpg"
+  },
+  {
+    "id": 5,
+    "victim_name": "Denji (Chainsaw Man)",
+    "victim_description": "Парень с бензопильной головой",
+    "victim_photo": "photos/5.jpg"
+  },
+  {
+    "id": 6,
+    "victim_name": "Power (Chainsaw Man)",
+    "victim_description": "Кровожадная демоница с рогами",
+    "victim_photo": "photos/6.jpg"
+  },
+  {
+    "id": 7,
+    "victim_name": "Anya Forger",
+    "victim_description": "Маленькая телепатка из Spy x Family",
+    "victim_photo": "photos/7.jpg"
+  },
+  {
+    "id": 8,
+    "victim_name": "Tifa Lockhart",
+    "victim_description": "Сильная и красивая боевая девушка",
+    "victim_photo": "photos/8.jpg"
+  },
+  {
+    "id": 9,
+    "victim_name": "D.Va",
+    "victim_description": "Геймер  и пилот меха из Overwatch",
+    "victim_photo": "photos/9.jpg"
+  },
+  {
+    "id": 10,
+    "victim_name": "Jinx",
+    "victim_description": "Сумасшедшая девочка с пушками из League of Legends",
+    "victim_photo": "photos/10.jpg"
+  },
+  {
+    "id": 11,
+    "victim_name": "Sailor Moon",
+    "victim_description": "Защитница любви и справедливости",
+    "victim_photo": "photos/11.jpg"
+  },
+  {
+    "id": 12,
+    "victim_name": "Levi Ackerman",
+    "victim_description": "Безжалостный солдат из Attack on Titan",
+    "victim_photo": "photos/12.jpg"
+  },
+  {
+    "id": 13,
+    "victim_name": "Lara Croft",
+    "victim_description": "Археолог с лицензией на убийство и вечной тягой к шортам.",
+    "victim_photo": "photos/13.jpg"
+  },
+  {
+    "id": 14,
+    "victim_name": "Jill Valentine",
+    "victim_description": "Видела больше зомби, чем ты кофе. И всё ещё на каблуках.",
+    "victim_photo": "photos/14.jpg"
+  },
+  {
+    "id": 15,
+    "victim_name": "Ellie ",
+    "victim_description": "Милая девочка с гитарой. И ножом. Иногда наоборот.",
+    "victim_photo": "photos/15.jpg"
+  },
+  {
+    "id": 16,
+    "victim_name": "Aloy ",
+    "victim_description": "Пошла собирать металлолом — стала богиней среди мехозавров.",
+    "victim_photo": "photos/16.jpg"
+  },
+  {
+    "id": 17,
+    "victim_name": "Geralt of Rivia",
+    "victim_description": "Ведьмак. Геральт. Готов убить чудовище. Или переспать с ним. В зависимости от маршрута.",
+    "victim_photo": "photos/17.jpg"
+  },
+  {
+    "id": 18,
+    "victim_name": "Misty ",
+    "victim_description": "Шорты короче, чем её терпение к бестактным тренерам.\"",
+    "victim_photo": "photos/18.jpg"
+  },
+  {
+    "id": 19,
+    "victim_name": "Wednesday Addams",
+    "victim_description": "Иронична  как смерть",
+    "victim_photo": "photos/19.jpg"
+  },
+  {
+    "id": 20,
+    "victim_name": "V (Cyberpunk 2077)",
+    "victim_description": "Половина тела — импланты. Вторая — сарказм.",
+    "victim_photo": "photos/20.jpg"
+  },
+  {
+    "id": 21,
+    "victim_name": "Raven (Teen Titans)",
+    "victim_description": "Готка с тремя дипломами по депрессии.",
+    "victim_photo": "photos/21.jpg"
+  },
+  {
+    "id": 22,
+    "victim_name": "Ryuko Matoi (Kill la Kill)",
+    "victim_description": "Костюма меньше, чем здравого смысла.",
+    "victim_photo": "photos/22.jpg"
+  },
+  {
+    "id": 23,
+    "victim_name": "Lady Dimitrescu (RE: Village)",
+    "victim_description": "9 футов pure mommy energy. Хруст костей — звук любви.",
+    "victim_photo": "photos/23.jpg"
+  },
+  {
+    "id": 24,
+    "victim_name": "Ranni the Witch (Elden Ring)",
+    "victim_description": "Холодная, мертвая и с кучей рук — всё как ты любишь.",
+    "victim_photo": "photos/24.jpg"
+  },
+  {
+    "id": 25,
+    "victim_name": "Malenia (Elden Ring)",
+    "victim_description": "Я не проигрывала… кроме команде кондиционеров на фестивалях.",
+    "victim_photo": "photos/25.jpg"
+  },
+  {
+    "id": 26,
+    "victim_name": "Homelander",
+    "victim_description": "Звезда, патриот, псих. Улыбается только когда вы орёте.",
+    "victim_photo": "photos/26.jpg"
+  },
+  {
+    "id": 27,
+    "victim_name": "Shadowheart",
+    "victim_description": "Жрица тьмы. Не трогай куб, если не готов к боли.",
+    "victim_photo": "photos/27.jpg"
+  },
+  {
+    "id": 28,
+    "victim_name": "Ken (2023)",
+    "victim_description": "Просто Кен. ",
+    "victim_photo": "photos/28.jpg"
+  },
+  {
+    "id": 29,
+    "victim_name": "The Knight (Hollow Knight)",
+    "victim_description": "Для интровертов с душой в стиле Dark Souls Jr",
+    "victim_photo": "photos/29.jpg"
+  },
+  {
+    "id": 30,
+    "victim_name": "Rebecca (Cyberpunk: Edgerunners)",
+    "victim_description": "психо-лоли с дробовиком",
+    "victim_photo": "photos/30.jpg"
+  },
+  {
+    "id": 31,
+    "victim_name": "Алан Уэйк",
+    "victim_description": "Свет его лечит, но не от депрессии.",
+    "victim_photo": "photos/31.jpg"
+  },
+  {
+    "id": 32,
+    "victim_name": "Миа Уоллес",
+    "victim_description": "воплощение стиля",
+    "victim_photo": "photos/32.jpg"
+  },
+  {
+    "id": 33,
+    "victim_name": "Anton Chigurh ",
+    "victim_description": "No Country for Old Men. стрижка, убийства, молчание.",
+    "victim_photo": "photos/33.jpg"
+  },
+  {
+    "id": 34,
+    "victim_name": "Безликая медсестра",
+    "victim_description": "медсестра, но диплом куплен у сатаны.",
+    "victim_photo": "photos/34.jpg"
+  },
+  {
+    "id": 35,
+    "victim_name": "Малефисента ",
+    "victim_description": "рога, декольте, обида",
+    "victim_photo": "photos/35.jpg"
+  },
+  {
+    "id": 36,
+    "victim_name": "Хейтем Кенуэй (AC3)",
+    "victim_description": "отец, колонист",
+    "victim_photo": "photos/36.jpg"
+  },
+  {
+    "id": 37,
+    "victim_name": "Гордон Фримен",
+    "victim_description": "Молчит",
+    "victim_photo": "photos/37.jpg"
+  },
+  {
+    "id": 38,
+    "victim_name": "Ева (Metal Gear Solid 3)",
+    "victim_description": "Ловко водит мотоцикл, мужчин и змей. Говорит одно, делает другое, работает на третьих. За её улыбкой — Пекин",
+    "victim_photo": "photos/38.jpg"
+  }
+]
