@@ -4,7 +4,7 @@ from pathlib import Path
 
 PLAYERS_FILE = Path("players.json")
 REPORT_FILE = Path("ritual_reports.json")
-VICTIMS_FILE = Path("victims.json")
+VICTIMS_FILE = Path("data") /"victims.json"
 
 def load_players():
     if PLAYERS_FILE.exists():
