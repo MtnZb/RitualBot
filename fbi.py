@@ -83,7 +83,6 @@ def register_fbi_handlers(dp: Dispatcher):
         victims = load_victims()
         data = await state.get_data()
         victim_id = int(data.get("victim_id"))
-        
         if victim_id not in victims:
             await message.reply("⚠️ Ошибка: данные жертвы не найдены.")
             return
@@ -98,13 +97,13 @@ def register_fbi_handlers(dp: Dispatcher):
         keyboard = InlineKeyboardMarkup()
         for v in options:
             keyboard.add(InlineKeyboardButton(
-                text=v["victim_name"],
+                text=v["name"],
                 callback_data=f"victim_choice:{v['id']}"
             ))
 
         await state.update_data(correct_victim_id=victim_id)
         await message.reply(
-            f"👤 <b>Описание жертвы:</b>\n{correct_victim['victim_description']}\n\nВыберите имя жертвы:",
+            f"👤 <b>Описание жертвы:</b>\n{correct_victim['description']}\n\nВыберите имя жертвы:",
             reply_markup=keyboard,
             parse_mode="HTML"
         )
