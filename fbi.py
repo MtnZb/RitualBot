@@ -69,28 +69,20 @@ def register_fbi_handlers(dp: Dispatcher):
 
         await message.reply("🕵️ Выберите дело для расследования:", reply_markup=keyboard)
         await state.set_state(FBIReport.choosing_case.state)
-
+# Выбор жертвы по описанию из 4 вариантов
     @dp.callback_query_handler(lambda c: c.data.startswith("fbi_case:"), state=FBIReport.choosing_case)
     async def select_case(callback: types.CallbackQuery, state: FSMContext):
         victim_id = int(callback.data.split(":")[1])
         await state.update_data(victim_id=victim_id)
-        await callback.message.edit_text("✅ Дело выбрано. Теперь выберите жертву по описанию...")
-        await state.set_state(FBIReport.choosing_victim.state)
 
-# Выбор жертвы по описанию из 4 вариантов
-    @dp.message_handler(state=FBIReport.choosing_victim)
-    async def choose_victim(message: types.Message, state: FSMContext):
         victims = load_victims()
-        data = await state.get_data()
-        victim_id = int(data.get("victim_id"))
         if victim_id not in victims:
-            await message.reply("⚠️ Ошибка: данные жертвы не найдены.")
+            await callback.message.edit_text("⚠️ Жертва не найдена.")
             return
 
         correct_victim = victims[victim_id]
         other_victims = [v for vid, v in victims.items() if vid != victim_id]
         random.shuffle(other_victims)
-
         options = [correct_victim] + other_victims[:3]
         random.shuffle(options)
 
@@ -102,11 +94,12 @@ def register_fbi_handlers(dp: Dispatcher):
             ))
 
         await state.update_data(correct_victim_id=victim_id)
-        await message.reply(
-            f"👤 <b>Описание жертвы:</b>\n{correct_victim['description']}\n\nВыберите имя жертвы:",
+        await callback.message.edit_text(
+                f"✅ Дело выбрано.\n\n👤 <b>Описание жертвы:</b>\n{correct_victim['description']}\n\nВыберите имя жертвы:",
             reply_markup=keyboard,
             parse_mode="HTML"
         )
+        await state.set_state(FBIReport.choosing_victim.state)
 
 # Обработка выбора жертвы
     @dp.callback_query_handler(lambda c: c.data.startswith("victim_choice:"), state=FBIReport.choosing_victim)

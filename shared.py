@@ -4,6 +4,7 @@ from pathlib import Path
 
 PLAYERS_FILE = Path("players.json")
 REPORT_FILE = Path("ritual_reports.json")
+VICTIMS_FILE = Path("victims.json")
 
 def load_players():
     if PLAYERS_FILE.exists():
@@ -20,5 +21,6 @@ def load_all_reports():
 def load_victims():
     if VICTIMS_FILE.exists():
         with open(VICTIMS_FILE, encoding="utf-8") as f:
-            return json.load(f)
+            raw = json.load(f)
+            return {int(k): v for k, v in raw.items()}  # 👈 важная правка
     return {}
