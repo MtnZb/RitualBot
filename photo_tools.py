@@ -40,7 +40,8 @@ def ultra_obscured_version(input_path):
         timestamp = "????-??-?? ??:??:??"
 
     try:
-        font = ImageFont.truetype("PressStart2P-Regular.ttf", 28)
+        font_path = os.path.join("fonts", "PressStart2P-Regular.ttf")
+        font = ImageFont.truetype(font_path, 28)
     except:
         font = ImageFont.load_default()
 

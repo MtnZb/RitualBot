@@ -72,6 +72,16 @@ def normalize_weapon_id(text):
     }
     text = text.strip().upper()
     return "".join(mapping.get(ch, ch) for ch in text)
+
+def safe_get_weapon_id(text):
+    if not text or "weapon:" not in text:
+        return None  # Вместо ошибки возвращаем None
+
+    weapon_id = text.split("weapon:", 1)[-1].strip()
+    if len(weapon_id) < 2:  # Проверяем минимальную длину
+        return None
+
+    return weapon_id
     
 
 def load_all_reports():
@@ -166,18 +176,18 @@ async def run_ritual():
     except FileNotFoundError:
         used_ids = []
 
-    available_victims = [v for v in victims if v["id"] not in used_ids]
-
-    if not available_victims:
-        await bot.send_message(CULT_CHANNEL_ID, "❗ Все жертвы использованы.")
-        auto_ritual_active = False
+    available_ids = [vid for vid in victims if str(vid) not in used_ids]
+    if not available_ids:
+        await bot.send_message(CULT_CHANNEL_ID, "Все жертвы использованы.")
         return
 
-    victim = random.choice(available_victims)
-    used_ids.append(victim["id"])
+    victim_id = random.choice(available_ids)
+    victim = victims[victim_id]
 
+    # Добавляем именно ключ (victim_id), а не victim["id"]
+    used_ids.append(victim_id)
     with open("used_victims.json", "w", encoding="utf-8") as f:
-        json.dump(used_ids, f)
+        json.dump(used_ids, f, ensure_ascii=False, indent=2)
 
     ritual = random.choice(rituals)
     weapon_entry = random.choice(weapons)
@@ -185,14 +195,14 @@ async def run_ritual():
     place = random.choice(places)
 
     event = {
-        "victim_id": victim["id"],
-        "victim_name": victim["victim_name"],
-        "victim_description": victim["victim_description"],
-        "victim_photo": victim["victim_photo"],
+        "victim_id": victim_id,
+        "victim_name": victim["name"],
+        "victim_description": victim["description"],
+        "victim_photo": victim["photo"],
         "ritual": ritual,
         "weapon": weapon,
         "place": place,
-        "assigned_weapons": []  # 🔧 Очистка
+        "assigned_weapons": []
     }
 
     with open(EVENT_FILE, "w", encoding="utf-8") as f:
@@ -349,6 +359,19 @@ async def handle_report(message: types.Message):
         print(f"[DEBUG] ⛔ Повторный отчёт от {username}")
         return
 
+    try:
+        with open(Path("data") / "weapons.json", encoding="utf-8") as f:
+            weapons = json.load(f)
+        matched = next((w for w in weapons if user_weapon["weapon_id"] in w.get("ids", [])), None)
+        weapon_name = matched.get("name") if matched else None
+
+        if not matched:
+            print(f"[DEBUG] ❌ Оружие с ID {user_weapon['weapon_id']} не найдено в списке weapons.")
+        else:
+            print(f"[DEBUG] ✅ Найдено оружие: {weapon_name}")
+    except Exception as e:
+        print(f"[DEBUG] ⚠️ Не удалось загрузить weapon_name: {e}")
+
     all_reports = load_all_reports()
     victim_key = str(event["victim_id"])
     if victim_key in all_reports:
@@ -365,10 +388,11 @@ async def handle_report(message: types.Message):
     print(f"[DEBUG] Фото сохранено: {destination}")
 
     await message.reply("📸 Отчёт отправлен на проверку. Ожидай подтверждения.")
+    
 
     caption = (
         f"🧾 Отчёт от @{username}\n"
-        f"Жертва ID: {event['victim_id']}\n"
+        f"Жертва: {event.get('victim_name')}\n"
         f"Ритуал: {event['ritual']}\n"
         f"Орудие: {user_weapon['weapon_id']}\n"
         f"Место: {event['place']}"
@@ -398,9 +422,13 @@ async def handle_report(message: types.Message):
             "user_id": user_id,
             "username": username,
             "weapon_id": user_weapon["weapon_id"],
+            "weapon": weapon_name,  # Название оружия
             "victim_id": event["victim_id"],
+            "victim_name": event.get("victim_name"),
+            "ritual": event.get("ritual"),
+            "place": event.get("place"),
             "photo_file": photo.file_id,
-            "message_id": sent_message.message_id  # ← ВАЖНО: правильный ID
+            "message_id": sent_message.message_id
         })
 
         with open("pending_reports.json", "w", encoding="utf-8") as f:
@@ -441,30 +469,19 @@ async def process_callback(call: CallbackQuery):
         scores[str(user_id)] = scores.get(str(user_id), 0) + 1
         save_scores(scores)
 
-        # 2. Загрузка данных
-        with open(EVENT_FILE, encoding="utf-8") as f:
-            event = json.load(f)
-
-        with open(WEAPONS_FILE, encoding="utf-8") as f:
-            weapons = json.load(f)
+        # 2. Данные из pending
+        ritual = entry.get("ritual")
+        place = entry.get("place")
+        weapon_name = entry.get("weapon")   # Название, не ID
+        weapon_id = entry.get("weapon_id")
+        victim_id = entry.get("victim_id")
+        
 
         players = load_players()
         player = players.get(str(user_id), {})
         identity_id = player.get("identity_id")
 
-        weapon_id = None
-        for w in event.get("assigned_weapons", []):
-            if w["user_id"] == user_id:
-                weapon_id = w["weapon_id"]
-                break
-
-        weapon_name = None
-        for w in weapons:
-            if w["name"] == event["weapon"]:
-                if weapon_id in w.get("ids", []):
-                    weapon_name = w["name"]
-                    break
-
+        
         photo_file_id = call.message.photo[-1].file_id if call.message.photo else None
         timestamp = datetime.utcnow().isoformat()
 
@@ -477,7 +494,11 @@ async def process_callback(call: CallbackQuery):
             "timestamp": timestamp
         }
 
-        add_report_entry(event["victim_id"], event, report_entry)
+        add_report_entry(victim_id, {
+            "victim_name": entry.get("victim_name"),
+            "ritual": ritual,
+            "place": place
+        }, report_entry)
 
         # 3. Ответы
         old_caption = call.message.caption or ""
@@ -754,8 +775,23 @@ async def start_handler(message: types.Message):
 @dp.message_handler(lambda message: message.text and message.text.startswith("weapon:"))
 async def handle_weapon_qr(message: types.Message):
     user_id = message.from_user.id
-    weapon_id_raw = message.text.split("weapon:", 1)[-1].strip()
+    username = message.from_user.username or f"id:{user_id}"
+    weapon_id_raw = safe_get_weapon_id(message.text)
+
+    if not weapon_id_raw:  # ✅ ИСПРАВЛЕНИЕ 3: проверяем ДО нормализации
+        await message.reply(
+            "❌ Неверный формат. Отправьте сообщение в виде:\n"
+            "<code>weapon:ABC123</code>", 
+            parse_mode="HTML"
+        )
+        print(f"[DEBUG] Неверный формат weapon_id от {username}: '{message.text}'")
+        return
     weapon_id = normalize_weapon_id(weapon_id_raw)
+
+    if len(weapon_id) < 2:
+        await message.reply("❌ ID оружия слишком короткий. Минимум 2 символа.")
+        print(f"[DEBUG] Слишком короткий weapon_id от {username}: '{weapon_id}'")
+        return
 
     if not EVENT_FILE.exists():
         await message.reply("❌ Сейчас нет активного ритуала.")

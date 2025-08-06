@@ -1,2 +1,15 @@
 {
+  "victim_id": "15",
+  "victim_name": "Ellie ",
+  "victim_description": "Милая девочка с гитарой. И ножом. Иногда наоборот.",
+  "victim_photo": "photos/15.jpg",
+  "ritual": "ожерелье боли",
+  "weapon": "свеча с ядом",
+  "place": "лестница к 2 этажу",
+  "assigned_weapons": [
+    {
+      "user_id": 6560267730,
+      "weapon_id": "B01"
+    }
+  ]
 }
