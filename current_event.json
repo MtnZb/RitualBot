@@ -1,10 +1,10 @@
 {
-  "victim_id": "20",
-  "victim_name": "V (Cyberpunk 2077)",
-  "victim_description": "Половина тела — импланты. Вторая — сарказм.",
-  "victim_photo": "photos/20.jpg",
+  "victim_id": "1",
+  "victim_name": "Harley Quinn",
+  "victim_description": "Сумасбродная анархистка из отряда самоубийц",
+  "victim_photo": "photos/1.jpg",
   "ritual": "ожерелье боли",
-  "weapon": "чернильная игла",
-  "place": "угол с табличкой 'инфо'",
+  "weapon": "свеча с ядом",
+  "place": "зал с арками",
   "assigned_weapons": []
 }

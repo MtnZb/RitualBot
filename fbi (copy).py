@@ -8,21 +8,18 @@ from pathlib import Path
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatMemberUpdated
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram import Dispatcher
-from shared import load_players, load_all_reports, load_victims, load_cultists, load_rituals, load_texts, send_info
+from shared import load_players, load_all_reports, load_victims, load_cultists, load_rituals
 from datetime import datetime, timedelta
 TZ_OFFSET = timedelta(hours=3)
 from photo_tools import ultra_obscured_version
-from aiogram.dispatcher.handler import SkipHandler  # импорт вверху файла
-
 
 REPORT_FILE = Path("ritual_reports.json")
 VICTIMS_FILE = Path("victims.json")
 CASES_FILE = Path("fbi_cases.json")
 SCORES_FILE = Path("scores.json")
 FBI_CHANNEL_ID = int(os.getenv("FBI_CHANNEL_ID", "0"))
-TEXTS_FILE = Path("data") / "texts.json"
 
 class FBIReport(StatesGroup):
     choosing_case = State()
@@ -143,55 +140,7 @@ def get_open_cases():
             "time": short_time
         })
     return open_cases
-    
 def register_fbi_handlers(dp: Dispatcher):
-
-    @dp.chat_member_handler()
-    async def on_join_fbi(event: types.ChatMemberUpdated):
-        # 1) работаем только в нужном чате
-        if event.chat.id != FBI_CHANNEL_ID:
-            return
-
-        old = event.old_chat_member
-        new = event.new_chat_member
-        if not new:
-            return
-
-        # 2) реагируем только на ВХОД пользователя (переход в member/administrator)
-        became_member = (
-            new.status in ("member", "administrator")
-            and (not old or old.status not in ("member", "administrator"))
-        )
-        if not became_member:
-            return
-
-        # 3) игнорируем ботов
-        if getattr(new.user, "is_bot", False):
-            return
-
-        me = await event.bot.get_me()
-        texts = load_texts()
-
-        kb = InlineKeyboardMarkup().add(
-            InlineKeyboardButton(
-                "📘 Инструкция ФБР (в личку)",
-                url=f"https://t.me/{me.username}?start=info_fbi"
-            )
-        )
-
-        await event.bot.send_message(
-            event.chat.id,
-            texts.get("fbi_join_hint", "Нажми, чтобы открыть инструкцию ФБР в личке."),
-            reply_markup=kb,
-            disable_web_page_preview=True
-        )
-    @dp.message_handler(commands=["инфо", "help"])
-    async def fbi_info(message: types.Message, state: FSMContext):
-        from shared import load_players  # локально, чтобы не плодить импортные циклы
-        await send_info(message, load_players)
-
-
-    
     # /дела — список дел только в ЛС (+кнопка deeplink из групп)
     @dp.message_handler(commands=["дела"])
     async def show_open_cases(message: types.Message, state: FSMContext):
@@ -288,34 +237,6 @@ def register_fbi_handlers(dp: Dispatcher):
         victim_id = int(victim_id_str)
         report_index = int(report_index_str)
         await state.update_data(victim_id=victim_id, report_index=report_index)
-        # внутри select_case() сразу после:
-        # await state.update_data(victim_id=victim_id, report_index=report_index)
-
-        # найдём нужное дело
-        cases = load_cases()
-        case = next((c for c in cases
-                     if int(c.get("victim_id", -1)) == victim_id
-                     and int(c.get("report_index", -1)) == report_index), None)
-
-        # если есть file_id — пошлём фото; если нет — попробуем с диска
-        if case:
-            file_id = case.get("obscured_file_id")
-            caption = (
-                f"🗂 Дело #{case.get('case_id','?')}\n"
-                f"Место: {case.get('place')}\n"
-                "ℹ️ На фото — искажённый кадр. Сопоставь с уликами."
-            )
-            try:
-                if file_id:
-                    await callback.message.answer_photo(file_id, caption=caption, parse_mode="HTML")
-                else:
-                    from pathlib import Path
-                    p = Path("fbi_cases") / f"case_{victim_id}-R{report_index+1}_obscured.jpg"
-                    if p.exists():
-                        await callback.message.answer_photo(types.InputFile(str(p)), caption=caption, parse_mode="HTML")
-            except Exception as e:
-                print(f"[FBI] Не удалось отправить искажённое фото в ЛС: {e}")
-
 
         victims = load_victims()
         if victim_id not in victims:
@@ -651,14 +572,6 @@ def register_fbi_handlers(dp: Dispatcher):
         }
         attempts.append(attempt)
         case["attempts"] = attempts
-        # === вычисляем очки по новой схеме ===
-        base_points = int(victim_correct) + int(weapon_correct) + (int(mask_correct) if mask_checked else 0) + int(ritual_correct)
-        bonus = 1 if (mask_checked and victim_correct and weapon_correct and mask_correct and ritual_correct) else 0
-        award = base_points + bonus
-
-        scores = load_scores()
-        scores[str(agent_id)] = scores.get(str(agent_id), 0) + award
-        save_scores(scores)
 
         # 7) Если всё верно — закрываем, начисляем очки и публикуем в канал ФБР
         if all_ok:
@@ -667,10 +580,15 @@ def register_fbi_handlers(dp: Dispatcher):
             case["solved_at"] = (datetime.utcnow() + TZ_OFFSET).isoformat()
 
             # Очки
+            scores = load_scores()
+            scores[str(agent_id)] = scores.get(str(agent_id), 0) + 1
+            save_scores(scores)
+
+            # Сообщение агенту
             await callback.message.edit_text(
                 "🟢 <b>Дело закрыто.</b>\n"
-                f"Начислено: +{award} очков (включая бонус за все четыре).\n"
-                "Все четыре пункта подтверждены: жертва, орудие, маска, ритуал.",
+                "Все четыре пункта подтверждены: жертва, орудие, маска, ритуал.\n"
+                "Начислено: +1 очко. Отчёт сохранён в архиве дел.",
                 parse_mode="HTML"
             )
 
@@ -691,45 +609,34 @@ def register_fbi_handlers(dp: Dispatcher):
             # Сообщение агенту с разбором
             lines = [
                 "🔴 <b>Проверка не пройдена.</b>",
-                "Баллы за попытку: +" + str(award),
                 "Для закрытия требуется верный ответ по всем пунктам:",
                 f"• Жертва: {'✅' if victim_correct else '❌'}",
                 f"• Оружие: {'✅' if weapon_correct else '❌'}",
-                f"• Маска: {'✅' if mask_correct else '❌'}" if mask_checked else "• Маска: — (не проверяется в этом деле)",
+                f"• Маска: {'✅' if mask_correct else '❌'}",
                 f"• Ритуал: {'✅' if ritual_correct else '❌'}",
                 "",
-                "Рекомендации: перечитайте досье, улики и внимательно проверьте транслитерацию оружия (A↔А, X↔Х)."
+                "Попытка агента исчерпана. Дело остаётся открытым.",
+                "Рекомендации: переоцените улики, перечитайте описания жертвы и методику ритуала, "
+                "перепроверьте транслитерацию оружия (A↔А, X↔Х и т. п.)."
             ]
             await callback.message.edit_text("\n".join(lines), parse_mode="HTML")
 
         # 8) Сохранить дела и завершить FSM
         save_cases(cases)
         await state.finish()
-        
-    @dp.message_handler(lambda m: (m.text or "").lower().startswith(("/start fbi_", "/start info_")), state="*")
+    @dp.message_handler(lambda m: m.text and m.text.lower().startswith("/start fbi_"), state="*")
     async def fbi_start_router(message: types.Message, state: FSMContext):
         if message.chat.type != "private":
             await message.reply("⛔ Команда доступна в личке боту.")
             return
-
-        args = (message.get_args() or "").lower().strip()
-        texts = load_texts()
-
+        args = (message.get_args() or "").lower()
         if args == "fbi_cases":
+            # вызвать локальный show_open_cases (объявлен ВНУТРИ register_fbi_handlers)
             return await show_open_cases(message, state)
-            raise CancelHandler()
         if args == "fbi_investigate":
+            # вызвать локальный start_fbi_report (тоже объявлен ВНУТРИ)
             return await start_fbi_report(message, state)
-            raise CancelHandler()
-        if args == "info_fbi":
-            return await message.reply(texts.get("info_fbi", "Инструкция ФБР недоступна."), parse_mode="HTML")
-            raise CancelHandler()
-        if args == "info_cult":
-            return await message.reply(texts.get("info_cult", "Памятка культа недоступна."), parse_mode="HTML")
-            raise CancelHandler()
-
-        # если сюда попали — пропускаем к следующему хендлеру
-        raise SkipHandler()
+        # если это /start с другими аргами — игнорируем, даст отработать твоему общему /start
 
 async def create_fbi_cases_for_victim(victim_id: int, bot, fbi_channel_id: int) -> int:
     """
@@ -795,6 +702,8 @@ async def create_fbi_cases_for_victim(victim_id: int, bot, fbi_channel_id: int) 
 
         caption = (
             f"🗂 <b>Новое дело</b> — <b>#{case_id}</b>\n"
+            f"Жертва: {block.get('victim_name')}\n"
+            f"Ритуал: {block.get('ritual')}\n"
             f"Место: {block.get('place')}\n"
             f"ℹ️ На фото — искажённый кадр. Найдите связь."
         )
@@ -824,10 +733,5 @@ async def create_fbi_cases_for_victim(victim_id: int, bot, fbi_channel_id: int) 
 
     if created:
         save_cases(cases)
-
-    texts = load_texts()
-    faq_fbi = texts.get("faq_fbi_card")
-    if faq_fbi:
-        await bot.send_message(fbi_channel_id, faq_fbi, parse_mode="HTML", disable_web_page_preview=True)
 
     return created

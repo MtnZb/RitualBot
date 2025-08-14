@@ -29,5 +29,36 @@
         "closed_case": false
       }
     ]
+  },
+  {
+    "case_id": "15-R1",
+    "victim_id": "15",
+    "victim_name": "Ellie ",
+    "ritual": "знак крови",
+    "place": "красный коридор",
+    "created_at": "2025-08-14T20:22:05.308965",
+    "obscured_file_id": "AgACAgIAAyEGAASoR0fAAAIBA2ieGz2nxp8qExMyetuFI-1bVpEDAALm9TEb1_nxSIlr4LSmN8svAQADAgADeAADNgQ",
+    "report_user_id": 6560267730,
+    "report_index": 0,
+    "status": "open",
+    "attempts": [
+      {
+        "agent_id": 6560267730,
+        "timestamp": "2025-08-14T20:23:50.384183",
+        "answers": {
+          "victim_id": 15,
+          "weapon_id": "D01",
+          "mask_symbol": "📻",
+          "ritual_guess": "ожерелье боли"
+        },
+        "result": {
+          "victim_correct": true,
+          "weapon_correct": true,
+          "mask_correct": false,
+          "ritual_correct": false
+        },
+        "closed_case": false
+      }
+    ]
   }
 ]

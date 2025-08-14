@@ -436,6 +436,12 @@ wheels = [
 ]
 
 [[package]]
+name = "patch"
+version = "1.16"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/74/0815f03c82f4dc738e2bfc5f8966f682bebcc809f30c8e306e6cc7156a99/patch-1.16.zip", hash = "sha256:c62073f356cff054c8ac24496f1a3d7cfa137835c31e9af39a9f5292fd75bd9f", size = 12809 }
+
+[[package]]
 name = "pillow"
 version = "11.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -609,6 +615,7 @@ dependencies = [
     { name = "aiogram" },
     { name = "numpy" },
     { name = "opencv-python" },
+    { name = "patch" },
     { name = "pillow" },
     { name = "python-dotenv" },
 ]
@@ -618,6 +625,7 @@ requires-dist = [
     { name = "aiogram", specifier = "==2.25.1" },
     { name = "numpy", specifier = ">=2.3.2" },
     { name = "opencv-python", specifier = ">=4.11.0.86" },
+    { name = "patch", specifier = "==1.16" },
     { name = "pillow", specifier = ">=10.4.0" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
 ]

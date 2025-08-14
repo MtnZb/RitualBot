@@ -28,5 +28,20 @@
         "timestamp": "2025-08-13T23:39:38.287025"
       }
     ]
+  },
+  "15": {
+    "victim_name": "Ellie ",
+    "ritual": "знак крови",
+    "place": "красный коридор",
+    "reports": [
+      {
+        "user_id": 6560267730,
+        "identity_id": "emil_danner",
+        "weapon_id": "D01",
+        "weapon_name": "молот из черепов",
+        "photo_file_id": "AgACAgIAAyEGAAScYVgeAAMxaJ4a1JxyqKayNXGr68IGth1OLUEAAgLxMRvcnvlIrNX1PhMjOfEBAAMCAAN5AAM2BA",
+        "timestamp": "2025-08-14T20:20:26.955083"
+      }
+    ]
   }
 }
