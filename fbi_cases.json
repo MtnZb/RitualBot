@@ -1,0 +1,33 @@
+[
+  {
+    "case_id": "16-R1",
+    "victim_id": "16",
+    "victim_name": "Aloy ",
+    "ritual": "ожерелье боли",
+    "place": "зал с арками",
+    "created_at": "2025-08-13T23:39:52.054878",
+    "obscured_file_id": "AgACAgIAAyEGAASoR0fAAAPuaJ0iR_GVI_I4rNnIT18fCYboKZMAAsb1MRu54ehIOZu_cx1qqiMBAAMCAAN4AAM2BA",
+    "report_user_id": 6560267730,
+    "report_index": 0,
+    "status": "open",
+    "attempts": [
+      {
+        "agent_id": 6560267730,
+        "timestamp": "2025-08-13T23:52:54.506034",
+        "answers": {
+          "victim_id": 16,
+          "weapon_id": "D01",
+          "mask_symbol": "♬",
+          "ritual_guess": "обратная молитва"
+        },
+        "result": {
+          "victim_correct": true,
+          "weapon_correct": true,
+          "mask_correct": false,
+          "ritual_correct": false
+        },
+        "closed_case": false
+      }
+    ]
+  }
+]

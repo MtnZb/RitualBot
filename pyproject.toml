@@ -5,8 +5,9 @@ description = ""
 authors = ["Your Name <you@example.com>"]
 requires-python = ">=3.11"
 dependencies = [
-    "aiogram>=3.21.0",
+    "aiogram==2.25.1",
     "numpy>=2.3.2",
     "opencv-python>=4.11.0.86",
     "python-dotenv>=1.1.1",
+    "pillow>=10.4.0"
 ]

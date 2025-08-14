@@ -1,15 +1,10 @@
 {
-  "victim_id": "15",
-  "victim_name": "Ellie ",
-  "victim_description": "Милая девочка с гитарой. И ножом. Иногда наоборот.",
-  "victim_photo": "photos/15.jpg",
+  "victim_id": "20",
+  "victim_name": "V (Cyberpunk 2077)",
+  "victim_description": "Половина тела — импланты. Вторая — сарказм.",
+  "victim_photo": "photos/20.jpg",
   "ritual": "ожерелье боли",
-  "weapon": "свеча с ядом",
-  "place": "лестница к 2 этажу",
-  "assigned_weapons": [
-    {
-      "user_id": 6560267730,
-      "weapon_id": "B01"
-    }
-  ]
+  "weapon": "чернильная игла",
+  "place": "угол с табличкой 'инфо'",
+  "assigned_weapons": []
 }

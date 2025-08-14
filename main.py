@@ -1,18 +1,24 @@
 import os
+import re
 import json
 import random
 import asyncio
+import cv2
+from urllib.parse import urlparse, parse_qs
+from aiogram.dispatcher.handler import CancelHandler, SkipHandler
 from pathlib import Path
 from aiogram import Bot, Dispatcher, types
+from aiogram.dispatcher import FSMContext
 from aiogram.utils import executor
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 from aiogram.utils.markdown import quote_html
 from aiogram.utils.exceptions import CantInitiateConversation
 from photo_tools import ultra_obscured_version
-from fbi import get_open_cases
+from fbi import create_fbi_cases_for_victim
+
 
 
 # Подгружаем переменные окружения из .env
@@ -23,9 +29,17 @@ CULT_CHANNEL_ID = int(os.getenv("CULT_CHANNEL_ID"))
 CONTROL_CHAT_ID = int(os.getenv("CONTROL_CHAT_ID"))
 FBI_CHANNEL_ID = int(os.getenv("FBI_CHANNEL_ID"))
 
+RITUAL_INTERVAL = 150
+TZ_OFFSET = timedelta(hours=3)
+
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
+async def on_startup(dp):
+    # снимаем вебхук, чтобы не было конфликта с polling
+    await bot.delete_webhook(drop_pending_updates=True)
+
+INVIS_RE = re.compile(r'[\u200B-\u200D\uFEFF]')  # zero-width & BOM
 
 # 👉 Подключаем хендлеры ФБР
 from fbi import register_fbi_handlers
@@ -65,12 +79,39 @@ def load_json(filename):
  #   with open(REPORT_FILE, "w", encoding="utf-8") as f:
   #      json.dump(data, f, ensure_ascii=False, indent=2)
 
+
+WEAPON_ALLOWED = re.compile(r"^[A-Z0-9\-]{2,32}$")
+
+def is_valid_weapon_id(wid: str) -> bool:
+    return bool(WEAPON_ALLOWED.match(wid))
+
+def cult_onboarding_message() -> str:
+    return (
+        "🧭 <b>Как участвовать в ритуале</b>\n"
+        "1) Дождись задания в канале культа (жертва, ритуал, место, оружие).\n"
+        "2) Отправь в ЛС ID оружия: <code>weapon:QW34</code>\n"
+        "   • кириллица не подойдёт: <code>Т≠T</code>, <code>Х≠X</code>\n"
+        "   • можно просто прислать фото QR — я распознаю сам.\n"
+        "3) Пришли <b>одно</b> фото ритуала в ЛС — оно уйдёт на проверку.\n"
+        "⚠️ В группах/канале фото не принимаю — только в личке."
+    )
+
+
 def normalize_weapon_id(text):
     mapping = {
-        "А": "A", "В": "B", "С": "C", "Е": "E", "Н": "H", "К": "K",
-        "М": "M", "О": "O", "Р": "P", "Т": "T", "Х": "X", "У": "Y"
+        "А":"A","В":"B","С":"C","Е":"E","Н":"H","К":"K","М":"M","О":"O","Р":"P","Т":"T","Х":"X","У":"Y",
+        "Ё":"E","Й":"I","І":"I","Ї":"I"
     }
+    if not text:
+        return ""
+    # приводим NBSP к обычному пробелу, убираем zero-width
+    text = str(text).replace("\xa0", " ")
+    text = INVIS_RE.sub("", text)
+    # обрезаем края и в верхний регистр
     text = text.strip().upper()
+    # убираем ВСЕ пробелы внутри (дефисы оставляем)
+    text = text.replace(" ", "")
+    # кириллицу -> латиница
     return "".join(mapping.get(ch, ch) for ch in text)
 
 def safe_get_weapon_id(text):
@@ -83,6 +124,50 @@ def safe_get_weapon_id(text):
 
     return weapon_id
     
+def extract_weapon_from_qr(image_path: str):
+    """
+    Возвращает weapon_id из QR, если на фото есть:
+      - https://t.me/<bot>?start=weapon-XXXX
+      - tg://resolve?domain=<bot>&start=weapon-XXXX
+      - просто текст 'weapon-XXXX' или 'weapon:XXXX'
+    Иначе None.
+    """
+    try:
+        img = cv2.imread(str(image_path))
+        if img is None:
+            return None
+        det = cv2.QRCodeDetector()
+        data, _, _ = det.detectAndDecode(img)
+        if not data:
+            return None
+
+        txt = data.strip()
+        # Вариант 1: полная ссылка
+        if txt.startswith("http://") or txt.startswith("https://") or txt.startswith("tg://"):
+            try:
+                u = urlparse(txt)
+                qs = parse_qs(u.query)
+                start_vals = qs.get("start") or []
+                if start_vals:
+                    payload = start_vals[0]
+                    # ожидаем weapon-XXXX
+                    if payload.lower().startswith("weapon-"):
+                        code = payload.split("-", 1)[-1]
+                        return normalize_weapon_id(code)
+            except Exception:
+                pass
+
+        # Вариант 2: голый payload
+        low = txt.lower()
+        if low.startswith("weapon-"):
+            return normalize_weapon_id(txt.split("-", 1)[-1])
+        if low.startswith("weapon:"):
+            return normalize_weapon_id(txt.split(":", 1)[-1])
+
+        return None
+    except Exception:
+        return None
+
 
 def load_all_reports():
     if REPORT_FILE.exists():
@@ -117,9 +202,14 @@ def add_report_entry(victim_id: str, victim_data: dict, report: dict):
             "place": victim_data.get("place"),
             "reports": []
         }
-
+    # 👉 новый блок: финальная защита
+    if len(all_reports[victim_key]["reports"]) >= MAX_REPORTS:
+        print(f"[add_report_entry] ⚠️ Лимит отчётов для жертвы {victim_key} достигнут")
+        return False
+        
     all_reports[victim_key]["reports"].append(report)
     save_all_reports(all_reports)
+    return True
 
 def load_scores():
     try:
@@ -152,11 +242,19 @@ def save_players(players):
 def already_in_team(user_id, team=None):
     players = load_players()
     current = players.get(str(user_id))
-    return current if (team is None or current == team) else None
+    if not isinstance(current, dict):
+        return None
+    if team is None:
+        return current
+    return current if current.get("team") == team else None
 
 def assign_team(user_id, team):
     players = load_players()
-    players[str(user_id)] = team
+    entry = players.get(str(user_id), {})
+    if not isinstance(entry, dict):
+        entry = {"team": str(entry)} if entry else {}
+    entry["team"] = team
+    players[str(user_id)] = entry
     save_players(players)
 
 # ==== ОСНОВНАЯ ЛОГИКА ====
@@ -180,6 +278,19 @@ async def run_ritual():
     if not available_ids:
         await bot.send_message(CULT_CHANNEL_ID, "Все жертвы использованы.")
         return
+
+    try:
+        if EVENT_FILE.exists():
+            with open(EVENT_FILE, encoding="utf-8") as f:
+                prev_event = json.load(f)
+            prev_victim_id = prev_event.get("victim_id")
+            if prev_victim_id is not None:
+                # создаём дела для ФБР по всем принятым отчётам R1..R3, постим в канал ФБР
+                created = await create_fbi_cases_for_victim(prev_victim_id, bot, FBI_CHANNEL_ID)
+                if created:
+                    print(f"[FBI] Создано дел по жертве {prev_victim_id}: {created}")
+    except Exception as e:
+        print(f"[FBI] Ошибка финализации предыдущего ивента: {e}")
 
     victim_id = random.choice(available_ids)
     victim = victims[victim_id]
@@ -240,10 +351,11 @@ async def start_ritual_loop(message: types.Message):
     async def auto_ritual_loop():
         while True:
             await run_ritual()
-            await asyncio.sleep(150)  # 2,5 минут
+            await asyncio.sleep(RITUAL_INTERVAL)  # 2,5 минут
 
     ritual_loop_task = asyncio.create_task(auto_ritual_loop())
-    await message.reply("🔮 Цикл ритуалов запущен. Каждые 15 минут будет новая жертва.")
+    pretty = f"{RITUAL_INTERVAL//60} мин" if RITUAL_INTERVAL % 60 == 0 else f"{RITUAL_INTERVAL} сек"
+    await message.reply(f"🔮 Цикл ритуалов запущен. Каждые {pretty} будет новая жертва.")
 
 @dp.message_handler(commands=["стоп"])
 async def stop_ritual_loop(message: types.Message):
@@ -264,44 +376,63 @@ async def stop_ritual_loop(message: types.Message):
 @dp.message_handler(commands=["очки"])
 async def show_scores(message: types.Message):
     scores = load_scores()
+    players = load_players()
+    user_id = str(message.from_user.id)
+
+    # Если пусто — быстрое сообщение и выход
     if not scores:
-        await message.reply("Пока никто не пролил кровь.")
+        if message.chat.id == FBI_CHANNEL_ID:
+            await message.reply("Пока ни у кого из ФБР нет очков.")
+        else:
+            await message.reply("Пока никто не пролил кровь.")
         return
 
+    # === Режим ФБР-канала ===
+    if message.chat.id == FBI_CHANNEL_ID:
+        # Мои очки
+        my_score = scores.get(user_id, 0)
+
+        # Соберём список только агентов ФБР
+        fbi_ids = [
+            uid for uid, pdata in players.items()
+            if isinstance(pdata, dict) and pdata.get("team") == "fbi"
+        ]
+        fbi_scores = [(uid, scores.get(uid, 0)) for uid in fbi_ids]
+
+        if not fbi_scores:
+            await message.reply(
+                f"🕵️ Твои очки: {my_score}\n"
+                f"Пока нет рейтинга среди ФБР.", parse_mode="HTML"
+            )
+            return
+
+        # Сортируем по очкам по убыванию
+        fbi_scores.sort(key=lambda x: x[1], reverse=True)
+        top_10 = fbi_scores[:10]
+
+        # Рисуем топ
+        lines = [
+            f"🕵️ <b>Твои очки:</b> {my_score}",
+            "🏆 <b>Топ-10 ФБР</b>:"
+        ]
+        for i, (uid, sc) in enumerate(top_10, 1):
+            mention = f"<a href='tg://user?id={uid}'>Агент</a>"
+            lines.append(f"{i}. {mention}: {sc}")
+
+        await message.reply("\n".join(lines), parse_mode="HTML")
+        return
+
+    # === Обычный режим (например, канал культа) — как было ===
     sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     top_10 = sorted_scores[:10]
 
     text = "🏆 <b>Топ-10 культистов</b>:\n"
-
-    for i, (user_id, score) in enumerate(top_10, 1):
-        mention = f"<a href='tg://user?id={user_id}'>Культист</a>"
+    for i, (uid, score) in enumerate(top_10, 1):
+        mention = f"<a href='tg://user?id={uid}'>Культист</a>"
         text += f"{i}. {mention}: {score} очков\n"
 
     await message.reply(text, parse_mode="HTML")
 
-@dp.message_handler(commands=["дела"])
-async def show_open_cases(message: types.Message):
-    user_id = message.from_user.id
-    players = load_players()
-
-    if players.get(str(user_id), {}).get("team") != "fbi":
-        await message.reply("⛔ Эта команда доступна только агентам ФБР.")
-        return
-
-    open_cases = get_open_cases()
-    if not open_cases:
-        await message.reply("✅ Все дела закрыты. Ждите следующего преступления.")
-        return
-
-    text = "<b>🕵️ Активные дела:</b>\n\n"
-
-    for case in open_cases:
-        text += (
-            f"📁 <b>{case['case_code']}</b>\n"
-            f"📍 {case['place']}\n\n"
-        )
-
-    await message.reply(text, parse_mode="HTML")
 
 # ==== ФОНОВАЯ ЗАДАЧА ====
 
@@ -314,19 +445,47 @@ async def auto_ritual_loop():
             except Exception as e:
                 print(f"⚠️ Ошибка в авто-ритуале: {e}")
         await asyncio.sleep(15)
+        
+# ==== ПРИЁМ QR С ОРУЖИЕМ (фото в ЛС) ====
+@dp.message_handler(lambda m: m.chat.type == "private", content_types=types.ContentType.PHOTO)
+async def handle_weapon_qr_photo(message: types.Message):
+    # Скачиваем фото во временный файл
+    photo = message.photo[-1]
+    os.makedirs("tmp", exist_ok=True)
+    tmp_path = Path("tmp") / f"qr_{message.from_user.id}_{photo.file_unique_id}.jpg"
+    await photo.download(destination_file=tmp_path)
 
+    wid = extract_weapon_from_qr(str(tmp_path))
+    try:
+        tmp_path.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    if not wid:
+        # Дай пройти следующему хендлеру (handle_report)
+        raise SkipHandler()
+
+    # Нашли weapon_id — валидируем и проводим через общий пайплайн
+    if not is_valid_weapon_id(wid):
+        await message.reply("❌ Некорректный ID в QR. Разрешены A–Z, 0–9 и «-», длина 2–32.")
+        # Останавливаем дальнейшие хендлеры, чтобы это фото не ушло как отчёт
+        raise CancelHandler()
+
+    await process_weapon_submission(message, wid)
+    # Останавливаем дальнейшие хендлеры (иначе это фото попадёт в модерацию как отчёт)
+    raise CancelHandler()
 # ==== ПРИЁМ ОТЧЁТОВ ====
 
 @dp.message_handler(content_types=types.ContentType.PHOTO)
 async def handle_report(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.username or f"id:{user_id}"
-    print(f"[DEBUG] Получено фото от {username} в чате {message.chat.id}")
 
-    if str(message.chat.id) != str(CULT_CHANNEL_ID):
-        print(f"[DEBUG] ❌ Сообщение не из CULT_CHANNEL_ID ({CULT_CHANNEL_ID})")
+    # ✅ Теперь отчёты принимаем только в личке
+    if message.chat.type != "private":
+        # мягко подскажем, что делать правильно
+        await message.reply("⛔ Фото-отчёт присылай **мне в личку**. В канал попадает только принятый отчёт.")
         return
-
     if not EVENT_FILE.exists():
         await message.reply("❌ Сейчас нет активного ритуала.")
         print(f"[DEBUG] ❌ Файл {EVENT_FILE} не найден.")
@@ -348,7 +507,22 @@ async def handle_report(message: types.Message):
     user_weapon = next((w for w in assigned_weapons if w["user_id"] == user_id), None)
 
     if not user_weapon:
-        await message.reply("⛔ Ты не указал ID оружия.\nСначала отправь сообщение вида: <code>weapon:QW34</code>", parse_mode="HTML")
+        try:
+            me = await bot.get_me()
+            await message.reply(
+                "⛔ Сначала укажи ID оружия.\n\n"
+                "1) Отправь в ЛС сообщение: <code>weapon:QW34</code>\n"
+                "   • кириллица не подойдёт: <code>Т≠T</code>, <code>Х≠X</code>\n"
+                "2) Или пришли фото QR с кодом — я распознаю его сам.\n\n"
+                f"👉 Если диалог закрыт: <a href='https://t.me/{me.username}'>открыть ЛС со мной</a>",
+                parse_mode="HTML"
+            )
+        except Exception:
+            await message.reply(
+                "⛔ Сначала укажи ID оружия: <code>weapon:QW34</code>\n"
+                "Или пришли фото QR — я вытащу код сам.",
+                parse_mode="HTML"
+            )
         print(f"[DEBUG] ⛔ Отчёт отклонён — не указан weapon_id от {username}")
         return
 
@@ -374,6 +548,12 @@ async def handle_report(message: types.Message):
 
     all_reports = load_all_reports()
     victim_key = str(event["victim_id"])
+    # 👉 новый блок: лимит уже принятых отчётов
+    if victim_key in all_reports and len(all_reports[victim_key]["reports"]) >= MAX_REPORTS:
+        await message.reply("⛔ Лимит отчётов по этой жертве достигнут. Дело закрыто.")
+        print(f"[DEBUG] ⛔ Лимит отчётов для {victim_key} достигнут")
+        return
+        
     if victim_key in all_reports:
         if any(r.get("user_id") == user_id for r in all_reports[victim_key]["reports"]):
             await message.reply("⛔ Ты уже присылал отчёт по этому ритуалу.")
@@ -450,11 +630,7 @@ async def process_callback(call: CallbackQuery):
     msg_id = call.data.split(":")[1]
     entry = next((r for r in pending if str(r.get("message_id", "")) == msg_id), None)
 
-    if entry:
-        pending.remove(entry)
-    else:
-        print(f"[DEBUG] ⚠️ Не найден отчёт с msg_id={msg_id} в pending.")
-    save_pending(pending)
+
 
     if not entry:
         await call.answer("⛔ Отчёт уже обработан.", show_alert=True)
@@ -464,27 +640,28 @@ async def process_callback(call: CallbackQuery):
     username = entry["username"]
 
     if action == "accept":
-        # 1. Очки
-        scores = load_scores()
-        scores[str(user_id)] = scores.get(str(user_id), 0) + 1
-        save_scores(scores)
-
-        # 2. Данные из pending
+        # данные
         ritual = entry.get("ritual")
         place = entry.get("place")
-        weapon_name = entry.get("weapon")   # Название, не ID
+        weapon_name = entry.get("weapon")
         weapon_id = entry.get("weapon_id")
         victim_id = entry.get("victim_id")
-        
 
+        # лимит перед записью
+        all_reports = load_all_reports()
+        vk = str(victim_id)
+        if vk in all_reports and len(all_reports[vk]["reports"]) >= MAX_REPORTS:
+            await call.answer("⛔ Лимит отчётов по этой жертве уже достигнут.", show_alert=True)
+            return
+
+        # identity_id, даже если в ФБР
         players = load_players()
         player = players.get(str(user_id), {})
         identity_id = player.get("identity_id")
 
-        
+        # готовим отчёт
         photo_file_id = call.message.photo[-1].file_id if call.message.photo else None
-        timestamp = datetime.utcnow().isoformat()
-
+        timestamp = (datetime.utcnow() + TZ_OFFSET).isoformat()
         report_entry = {
             "user_id": user_id,
             "identity_id": identity_id,
@@ -494,19 +671,75 @@ async def process_callback(call: CallbackQuery):
             "timestamp": timestamp
         }
 
-        add_report_entry(victim_id, {
+        # запись в базу
+        ok = add_report_entry(victim_id, {
             "victim_name": entry.get("victim_name"),
             "ritual": ritual,
             "place": place
         }, report_entry)
 
-        # 3. Ответы
+        if not ok:
+            await call.answer("⛔ Лимит отчётов по этой жертве уже достигнут.", show_alert=True)
+            return
+
+        # успех -> удаляем из pending
+        if entry in pending:
+            pending.remove(entry)
+            save_pending(pending)
+        
+        # начисляем очки
+        scores = load_scores()
+        scores[str(user_id)] = scores.get(str(user_id), 0) + 1
+        save_scores(scores)
+
+        # обновляем caption
         old_caption = call.message.caption or ""
         new_caption = old_caption + f"\n✅ Очки начислены ({scores[str(user_id)]})"
         await call.message.edit_caption(new_caption)
         await bot.send_message(CULT_CHANNEL_ID, f"✅ @{username}, отчёт принят. У него {scores[str(user_id)]} очков.")
 
+        # ✅ Дублируем подтверждение в личку автору отчёта
+        try:
+            await bot.send_message(
+                user_id,
+                (
+                    "✅ Твой отчёт принят!\n"
+                    f"Жертва: {entry.get('victim_name')}\n"
+                    f"Ритуал: {ritual}\n"
+                    f"Орудие: {weapon_name or weapon_id}\n"
+                    f"Место: {place}\n\n"
+                    "🏅 Начислено: +1 очко\n"
+                    f"💰 Твой счёт: {scores[str(user_id)]}\n\n"
+                    "Следи за каналом культа — новое задание уже близко."
+                )
+            )
+        except Exception as e:
+            print(f"[DEBUG] ❌ Не удалось отправить подтверждение в личку: {e}")
+        # ✅ Публикуем принятую фотографию в канал культа
+        try:
+            # берём то же фото, которое пришло на модерацию
+            final_caption = (
+                f"🧾 Принятый отчёт от @{username}\n"
+                f"Жертва: {entry.get('victim_name')}\n"
+                f"Ритуал: {ritual}\n"
+                f"Орудие: {weapon_name or weapon_id}\n"
+                f"Место: {place}"
+            )
+            # в контрол-чате у нас есть объект с фото; безопаснее переслать по file_id
+            if call.message.photo:
+                file_id = call.message.photo[-1].file_id
+                await bot.send_photo(CULT_CHANNEL_ID, photo=file_id, caption=final_caption)
+            else:
+                # fallback, если вдруг нет photo в самом сообщении (редкий случай)
+                await bot.send_message(CULT_CHANNEL_ID, final_caption)
+        except Exception as e:
+            print(f"[DEBUG] ⚠️ Не удалось опубликовать фото в канал культа: {e}")
+
     elif action == "reject":
+        if entry in pending:
+            pending.remove(entry)
+            save_pending(pending)
+            
         try:
             new_caption = (call.message.caption or "") + "\n❌ Отчёт отклонён"
             await call.message.edit_caption(new_caption)
@@ -590,6 +823,25 @@ async def handle_team_selection(call: types.CallbackQuery):
             f"➡️ Вступи в культ: {invite_link}"
         )
         await call.message.edit_text(text, parse_mode="HTML")
+        # ➕ Отправляем новичку пошаговую инструкцию в ЛС
+        try:
+            await bot.send_message(
+                user_id,
+                cult_onboarding_message(),
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+        except CantInitiateConversation:
+            # если ЛС закрыт — дадим ссылку-напоминание прямо там, где он нажал кнопку
+            try:
+                me = await bot.get_me()
+                await call.message.answer(
+                    "ℹ️ Открой личку со мной, чтобы получить инструкции: "
+                    f"<a href='https://t.me/{me.username}'>перейти в ЛС</a>",
+                    parse_mode="HTML", disable_web_page_preview=True
+                )
+            except Exception:
+                pass
 
     else:  # join_fbi
         # ИСПРАВЛЕННАЯ ЛОГИКА ДЛЯ ФБР
@@ -642,8 +894,10 @@ async def handle_team_selection(call: types.CallbackQuery):
             penalty_text = ""
 
         # Переводим в команду ФБР
-        players[str(user_id)] = {"team": "fbi"}
+        curr = players.get(str(user_id), {})
+        players[str(user_id)] = {**curr, "team": "fbi"}
         save_players(players)
+        
 
         # Создаем инвайт в ФБР
         try:
@@ -757,13 +1011,26 @@ async def on_chat_member_update(update: types.ChatMemberUpdated):
         CULT_CHANNEL_ID,
         f"🌒 Новое лицо под маской вступило в культ.\n"
         f"{mention} теперь {identity['name']} {identity['mask_symbol']}\n"
-        f"<i>{identity['description']}</i>",
+        f"<i>{identity['description']}</i>\n"
+        f"ℹ️ Инструкции отправлены ему в личные сообщения.",
         parse_mode="HTML"
     )
 
 #кнопка старт для игроков
 @dp.message_handler(commands=["start"])
-async def start_handler(message: types.Message):
+async def start_handler(message: types.Message, state: FSMContext):
+    args = message.get_args() or ""
+
+    # 🔒 Пусть fbi-роутер обрабатывает /start fbi_*
+    if args.lower().startswith("fbi_"):
+        return
+    # 👉 СНАЧАЛА: приём weapon через deeplink
+    if args.lower().startswith("weapon-"):
+        payload = args.split("-", 1)[-1]
+        return await process_weapon_submission(message, payload)
+
+
+    # Обычное поведение
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton("🔮 Вступить в Культ", callback_data="join_cult"),
@@ -771,82 +1038,96 @@ async def start_handler(message: types.Message):
     )
     await message.answer("Выбери свою сторону:", reply_markup=kb)
     
- ## ==== ОБРАБОТКА ОРУЖИЯ ====   
-@dp.message_handler(lambda message: message.text and message.text.startswith("weapon:"))
-async def handle_weapon_qr(message: types.Message):
+async def process_weapon_submission(message: types.Message, weapon_payload: str):
+    # 1) Только личка
+    if message.chat.type != "private":
+        try:
+            me = await bot.get_me()
+            # нормализуем, чтобы сразу дать удобную ссылку
+            wid_hint = normalize_weapon_id(weapon_payload or "XXXX")
+            deeplink = f"https://t.me/{me.username}?start=weapon-{wid_hint or 'XXXX'}"
+            await message.reply(
+                f"⛔ Отправь ID оружия мне в личку.\n"
+                f"👉 <a href='{deeplink}'>Открыть диалог</a>",
+                parse_mode="HTML"
+            )
+        except Exception:
+            await message.reply("⛔ Отправь ID оружия мне в личку.")
+        return
+
     user_id = message.from_user.id
     username = message.from_user.username or f"id:{user_id}"
-    weapon_id_raw = safe_get_weapon_id(message.text)
 
-    if not weapon_id_raw:  # ✅ ИСПРАВЛЕНИЕ 3: проверяем ДО нормализации
-        await message.reply(
-            "❌ Неверный формат. Отправьте сообщение в виде:\n"
-            "<code>weapon:ABC123</code>", 
-            parse_mode="HTML"
-        )
-        print(f"[DEBUG] Неверный формат weapon_id от {username}: '{message.text}'")
-        return
-    weapon_id = normalize_weapon_id(weapon_id_raw)
-
+    # 2) Нормализация
+    weapon_id = normalize_weapon_id(weapon_payload or "")
     if len(weapon_id) < 2:
-        await message.reply("❌ ID оружия слишком короткий. Минимум 2 символа.")
-        print(f"[DEBUG] Слишком короткий weapon_id от {username}: '{weapon_id}'")
+        await message.reply("❌ Неверный/слишком короткий ID. Пример: <code>weapon:ABC123</code>", parse_mode="HTML")
         return
 
+    # 3) Ивент
     if not EVENT_FILE.exists():
         await message.reply("❌ Сейчас нет активного ритуала.")
         return
-
     try:
         with open(EVENT_FILE, encoding="utf-8") as f:
             event = json.load(f)
-    except Exception as e:
+    except Exception:
         await message.reply("⚠️ Не удалось прочитать активный ритуал.")
         return
 
+    # 4) Оружие из базы
     try:
         with open(WEAPONS_FILE, encoding="utf-8") as f:
             weapons = json.load(f)
-    except Exception as e:
+    except Exception:
         await message.reply("⚠️ Не удалось загрузить weapons.json.")
         return
 
-    # Найти подходящий набор id для текущего оружия
-    weapon_entry = next((w for w in weapons if w["name"] == event["weapon"]), None)
-
+    weapon_entry = next((w for w in weapons if w.get("name") == event.get("weapon")), None)
     if not weapon_entry:
-        await message.reply("❌ Оружие не найдено в базе.")
+        await message.reply("❌ Оружие задания не найдено в базе.")
         return
 
-    if weapon_id not in weapon_entry["ids"]:
-        await message.reply("❌ Неверный ID. Это не то оружие.")
+    ids_list = weapon_entry.get("ids", [])
+    ids_norm = {normalize_weapon_id(x) for x in ids_list if isinstance(x, str)}
+    if weapon_id not in ids_norm:
+        await message.reply(
+            "❌ Неверный ID — он не относится к текущему оружию.\n"
+            f"🔎 Сейчас в задании: <b>{event.get('weapon')}</b>.\n"
+            "Проверь QR/раскладку (например, <code>Т≠T</code>, <code>Х≠X</code>) и попробуй ещё раз.",
+            parse_mode="HTML"
+        )
         return
 
-    # Проверить, подавал ли уже этот пользователь
-    # Проверить, подавал ли уже этот пользователь
+    # 5) Запрет повторов по отчётам (если уже сдавал по этой жертве)
     reports = load_all_reports()
-    victim_key = str(event["victim_id"])
-
+    victim_key = str(event.get("victim_id"))
     if victim_key in reports:
-        if any(r.get("user_id") == user_id for r in reports[victim_key]["reports"]):
-            await message.reply("⛔ Ты уже сообщил о своём оружии.")
+        if any(r.get("user_id") == user_id for r in reports[victim_key].get("reports", [])):
+            await message.reply("⛔ Ты уже сдавал отчёт по этому ритуалу.")
             return
 
-   
-    # Сохраняем weapon_id за этим пользователем в текущем ритуале
+    # 6) Сохраняем weapon за пользователем в текущем ивенте
     event.setdefault("assigned_weapons", [])
-    # Удаляем предыдущую запись, если она была
-    event["assigned_weapons"] = [w for w in event["assigned_weapons"] if w["user_id"] != user_id]
-
-    event["assigned_weapons"].append({
-        "user_id": user_id,
-        "weapon_id": weapon_id
-    })
+    event["assigned_weapons"] = [w for w in event["assigned_weapons"] if w.get("user_id") != user_id]
+    event["assigned_weapons"].append({"user_id": user_id, "weapon_id": weapon_id})
 
     with open(EVENT_FILE, "w", encoding="utf-8") as f:
         json.dump(event, f, ensure_ascii=False, indent=2)
 
-    await message.reply(f"🔐 Твой ID оружия (<code>{weapon_id}</code>) принят. Ждём фото ритуала.", parse_mode="HTML")
+    await message.reply(
+        f"🔐 Твой ID оружия (<code>{weapon_id}</code>) принят.\n"
+        f"📸 Теперь пришли фото ритуала **одним сообщением** — оно уйдёт на проверку.",
+        parse_mode="HTML"
+    )
+
+
+## ==== ОБРАБОТКА ОРУЖИЯ ====   
+@dp.message_handler(lambda m: m.text and re.match(r'^\s*weapon\s*:\s*', m.text, re.I))
+async def handle_weapon_qr(message: types.Message):
+    m = re.match(r'^\s*weapon\s*:\s*(.+)$', message.text, re.I | re.S)
+    weapon_id_raw = m.group(1) if m else ""
+    await process_weapon_submission(message, weapon_id_raw)
 
 # ==== ЗАПУСК ====
 
@@ -856,6 +1137,7 @@ if __name__ == "__main__":
     loop.create_task(auto_ritual_loop())
     executor.start_polling(
         dp,
+        on_startup=on_startup,          # ← добавили
         skip_updates=False,
         allowed_updates=[
             "message",

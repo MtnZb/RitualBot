@@ -1,16 +1,31 @@
 {
-  "15": {
-    "victim_name": "Ellie ",
-    "ritual": "ожерелье боли",
-    "place": "лестница к 2 этажу",
+  "24": {
+    "victim_name": "Ranni the Witch (Elden Ring)",
+    "ritual": "танец без лица",
+    "place": "красный коридор",
     "reports": [
       {
         "user_id": 6560267730,
-        "identity_id": null,
-        "weapon_id": "B01",
-        "weapon_name": "свеча с ядом",
-        "photo_file_id": "AgACAgIAAyEGAAScYVgeAAMiaJHk-OJKan6aK2XJMOb8ujXSq8EAApH5MRt6CpFIAlb1RXHc_bgBAAMCAAN5AAM2BA",
-        "timestamp": "2025-08-05T12:24:50.383617"
+        "identity_id": "emil_danner",
+        "weapon_id": "C01",
+        "weapon_name": "верёвка из волос",
+        "photo_file_id": "AgACAgIAAyEGAAScYVgeAAMvaJ0ee2HBSMxmNMaEwF7ln6mojOUAAm8AATIbpBroSF-TPq1RBT_TAQADAgADeQADNgQ",
+        "timestamp": "2025-08-13T23:23:46.203779"
+      }
+    ]
+  },
+  "16": {
+    "victim_name": "Aloy ",
+    "ritual": "ожерелье боли",
+    "place": "зал с арками",
+    "reports": [
+      {
+        "user_id": 6560267730,
+        "identity_id": "emil_danner",
+        "weapon_id": "D01",
+        "weapon_name": "молот из черепов",
+        "photo_file_id": "AgACAgIAAyEGAAScYVgeAAMtaJz0bS4ORmUlMlWvfW0a6VlFu7IAArf_MRukGuhIywSMLCm7t6oBAAMCAAN5AAM2BA",
+        "timestamp": "2025-08-13T23:39:38.287025"
       }
     ]
   }

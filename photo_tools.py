@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from datetime import datetime
+from datetime import datetime, timedelta
+TZ_OFFSET = timedelta(hours=3)
 import os
 
 def ultra_obscured_version(input_path):
@@ -34,8 +35,11 @@ def ultra_obscured_version(input_path):
     img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
     draw = ImageDraw.Draw(img_pil)
 
+
     try:
-        timestamp = datetime.fromtimestamp(os.path.getmtime(input_path)).strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = (
+            datetime.fromtimestamp(os.path.getmtime(input_path)) + timedelta(hours=3)
+        ).strftime("%Y-%m-%d %H:%M:%S")
     except:
         timestamp = "????-??-?? ??:??:??"
 
